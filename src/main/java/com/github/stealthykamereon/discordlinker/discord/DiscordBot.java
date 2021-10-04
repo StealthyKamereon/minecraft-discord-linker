@@ -5,9 +5,12 @@ import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.MessageBuilder;
+import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.TextChannel;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.hooks.AnnotatedEventManager;
+import net.dv8tion.jda.internal.entities.RichPresenceImpl;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -24,6 +27,7 @@ public class DiscordBot {
 
     private final String CHANNEL_FILE_PATH = "config/discord_channel.id";
     private final String HEAD_URL = "https://www.mc-heads.net/avatar/%s/32.png";
+    private final String TPS = "Tick Time : %.2fms";
     private final Logger LOGGER = LogManager.getLogger();
 
     private String syncedChannelId = "";
@@ -75,21 +79,30 @@ public class DiscordBot {
     }
 
     public void sendMessage(ServerPlayerEntity author, String content) {
+        this.sendMessage(author.getDisplayName().getString(), author.getStringUUID(), author.getLevel().dimension().location().getPath(), content);
+    }
+
+    public void sendMessage(PlayerEntity entity, String content) {
+        this.sendMessage(entity.getDisplayName().getString(), entity.getStringUUID(), entity.level.dimension().location().getPath(), content);
+    }
+
+    public void sendMessage(String authorName, String authorUUID, String authorDimension, String content) {
         if (!this.syncedChannelId.equals("")) {
             EmbedBuilder embedBuilder = new EmbedBuilder();
-            embedBuilder.setAuthor(author.getDisplayName().getString());
-            embedBuilder.setThumbnail(String.format(HEAD_URL, author.getStringUUID()));
+            embedBuilder.setAuthor(authorName);
+            embedBuilder.setThumbnail(String.format(HEAD_URL, authorUUID));
             embedBuilder.setDescription(content);
-            String dimension = author.getLevel().dimension().location().getPath();
-            System.out.println(dimension);
-            if (this.dimensionColors.containsKey(dimension)) {
-                embedBuilder.setColor(this.dimensionColors.get(dimension));
-                System.out.println("Color");
+            if (this.dimensionColors.containsKey(authorDimension)) {
+                embedBuilder.setColor(this.dimensionColors.get(authorDimension));
             }
             MessageBuilder messageBuilder = new MessageBuilder();
             messageBuilder.setEmbeds(embedBuilder.build());
             this.jda.getTextChannelById(this.syncedChannelId).sendMessage(messageBuilder.build()).queue();
         }
+    }
+
+    public void updateRichPresence(float tps) {
+        this.jda.getPresence().setPresence(Activity.of(Activity.ActivityType.WATCHING, String.format(TPS, tps)), false);
     }
 
     public void stop() {

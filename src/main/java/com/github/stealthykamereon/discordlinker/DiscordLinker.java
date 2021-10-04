@@ -5,14 +5,19 @@ import net.dv8tion.jda.api.entities.ChannelType;
 import net.dv8tion.jda.api.events.GenericEvent;
 import net.dv8tion.jda.api.events.ReadyEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.ServerPlayerEntity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.text.StringTextComponent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.ServerChatEvent;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.player.AdvancementEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.server.FMLServerStartingEvent;
+import net.minecraftforge.fml.event.server.FMLServerStoppedEvent;
 import net.minecraftforge.fml.event.server.FMLServerStoppingEvent;
 import net.minecraftforge.fml.server.ServerLifecycleHooks;
 import org.apache.logging.log4j.LogManager;
@@ -20,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 import javax.security.auth.login.LoginException;
 import java.io.IOException;
+import java.util.Timer;
 import java.util.UUID;
 
 @Mod("discordlinker")
@@ -27,9 +33,9 @@ public class DiscordLinker {
 
     private static final Logger LOGGER = LogManager.getLogger();
     private static final String D2MC_MESSAGE_FORMAT = "<Discord/%s> %s";
-    private static final String MC2D_MESSAGE_FORMAT = "%s";
     private MinecraftServer server;
-    protected DiscordBot bot;
+    private DiscordBot bot;
+    private Timer tpsUpdater;
 
     public DiscordLinker() {
         MinecraftForge.EVENT_BUS.register(this);
@@ -45,16 +51,26 @@ public class DiscordLinker {
         } catch (LoginException e) {
             LOGGER.error("Couldn't connect to discord : ", e);
         }
+        tpsUpdater = new Timer("TPS Updater", true);
+        tpsUpdater.scheduleAtFixedRate(new TPSUpdateThread(server, bot::updateRichPresence), 1000, 16000);
     }
 
     @SubscribeEvent
-    public void onServerStopping(FMLServerStoppingEvent event) {
+    public void onServerStopping(FMLServerStoppedEvent event) {
         this.bot.stop();
+        tpsUpdater.cancel();
     }
 
     @SubscribeEvent
     public void onServerChat(ServerChatEvent event) {
         this.bot.sendMessage(event.getPlayer(), event.getMessage());
+    }
+
+    @SubscribeEvent
+    public void onPlayerDied(LivingDeathEvent event) {
+        if (event.getEntity() instanceof PlayerEntity) {
+            this.bot.sendMessage((PlayerEntity) event.getEntity(), event.getSource().getLocalizedDeathMessage(event.getEntityLiving()).getString());
+        }
     }
 
     @net.dv8tion.jda.api.hooks.SubscribeEvent
@@ -84,7 +100,4 @@ public class DiscordLinker {
         return String.format(D2MC_MESSAGE_FORMAT, event.getAuthor().getName(), event.getMessage().getContentDisplay());
     }
 
-    private String formatMessage(ServerChatEvent event) {
-        return String.format(MC2D_MESSAGE_FORMAT, event.getMessage());
-    }
 }
